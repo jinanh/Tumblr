@@ -9,10 +9,10 @@
 import UIKit
 import AlamofireImage
 
-class PhotosViewController: UIViewController, UITableViewDataSource {
+class PhotosViewController: UIViewController, UITableViewDataSource, UITableViewDelegate, UIScrollViewDelegate {
     var posts: [[String: Any]] = []
     var refreshControl: UIRefreshControl!
-    
+    var isMoreDataLoading = false
     @IBOutlet weak var tableView: UITableView!
     
     override func viewDidLoad() {
@@ -25,12 +25,29 @@ class PhotosViewController: UIViewController, UITableViewDataSource {
         
         tableView.dataSource = self
         tableView.rowHeight = 200
+        tableView.delegate = self
         fetchPosts()
         
     }
     
     @objc func didPullToRefresh(_ refreshControl: UIRefreshControl) {
         fetchPosts()
+    }
+    
+    
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        if(!isMoreDataLoading){
+            // Calculate the position of one screen length before the bottom of the results
+            let scrollViewContentHeight = tableView.contentSize.height
+            let scrollOffsetThreshold = scrollViewContentHeight - tableView.bounds.size.height
+            
+            // When the user has scrolled past the threshold, start requesting
+            if(scrollView.contentOffset.y > scrollOffsetThreshold && tableView.isDragging) {
+                isMoreDataLoading = true
+                
+                fetchPosts()
+            }
+        }
     }
     
     func displayAlert(){
@@ -58,9 +75,12 @@ class PhotosViewController: UIViewController, UITableViewDataSource {
     func fetchPosts() {
         // Network request snippet
         let url = URL(string: "https://api.tumblr.com/v2/blog/humansofnewyork.tumblr.com/posts/photo?api_key=Q6vHoaVm5L1u2ZAW1fqv3Jw48gFzYVg9P0vH0VHl3GVy6quoGV")!
-        let session = URLSession(configuration: .default, delegate: nil, delegateQueue: OperationQueue.main)
+        let session = URLSession(configuration: URLSessionConfiguration.default, delegate: nil, delegateQueue: OperationQueue.main)
         session.configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        let task = session.dataTask(with: url) { (data, response, error) in
+        let task : URLSessionDataTask = session.dataTask(with: url, completionHandler: { (data, response, error) in
+            
+            self.isMoreDataLoading = false
+            
             if let error = error {
                 self.displayAlert()
                 print(error.localizedDescription)
@@ -77,8 +97,12 @@ class PhotosViewController: UIViewController, UITableViewDataSource {
                 self.tableView.reloadData()
                 self.refreshControl.endRefreshing()
             }
-        }
+        })
         task.resume()
+    }
+    
+    func tableView(_ tableView: UITableView, didSelectRowAt indexpath: IndexPath) {
+        tableView.deselectRow(at: indexpath, animated: true)
     }
     
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
@@ -106,6 +130,14 @@ class PhotosViewController: UIViewController, UITableViewDataSource {
         }
         
         return cell
+    }
+    
+    override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
+        let vc = segue.destination as!   PhotoDetailsViewController
+        let cell = sender as! UITableViewCell
+        let indexPath = tableView.indexPath(for: cell)!
+        let post = posts[indexPath.row]
+        vc.post = post
     }
     
     
